@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/metacubex/mihomo/component/resolver"
 	"net/http"
 	"os"
 	"os/signal"
@@ -62,7 +63,7 @@ func main() {
 	if *debugMode && !*enableUnlock && *blockKeywords == "" {
 		log.Fatalln("debug mode can only be used with unlock testing or node blocking enabled")
 	}
-
+	resolver.DisableIPv6 = false
 	speedTester := speedtester.New(&speedtester.Config{
 		ConfigPaths:      *configPathsConfig,
 		FilterRegex:      *filterRegexConfig,
@@ -84,7 +85,6 @@ func main() {
 	if *debugMode {
 		fmt.Println("Debug 模式已启用")
 	}
-
 	allProxies, err := speedTester.LoadProxies()
 	if err != nil {
 		log.Fatalln("load proxies failed: %v", err)
