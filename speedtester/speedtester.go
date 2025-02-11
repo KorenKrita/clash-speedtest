@@ -75,8 +75,9 @@ type RawConfig struct {
 	Proxies   []map[string]any          `yaml:"proxies"`
 }
 
-func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
+func (st *SpeedTester) LoadProxies() (map[string]*CProxy, []string, error) {
 	allProxies := make(map[string]*CProxy)
+	var proxyOrder []string // 新增：用于保存原始顺序
 	st.blockedNodes = make([]string, 0)
 	st.blockedNodeCount = 0
 
@@ -103,7 +104,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			Proxies: []map[string]any{},
 		}
 		if err := yaml.Unmarshal(body, rawCfg); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		proxies := make(map[string]*CProxy)
 		proxiesConfig := rawCfg.Proxies
@@ -112,24 +113,24 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 		for i, config := range proxiesConfig {
 			proxy, err := adapter.ParseProxy(config)
 			if err != nil {
-				return nil, fmt.Errorf("proxy %d: %w", i, err)
+				return nil, nil, fmt.Errorf("proxy %d: %w", i, err)
 			}
 
 			if _, exist := proxies[proxy.Name()]; exist {
-				return nil, fmt.Errorf("proxy %s is the duplicate name", proxy.Name())
+				return nil, nil, fmt.Errorf("proxy %s is the duplicate name", proxy.Name())
 			}
 			proxies[proxy.Name()] = &CProxy{Proxy: proxy, Config: config}
 		}
 		for name, config := range providersConfig {
 			if name == provider.ReservedName {
-				return nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
+				return nil, nil, fmt.Errorf("can not defined a provider called `%s`", provider.ReservedName)
 			}
 			pd, err := provider.ParseProxyProvider(name, config)
 			if err != nil {
-				return nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
+				return nil, nil, fmt.Errorf("parse proxy provider %s error: %w", name, err)
 			}
 			if err := pd.Initial(); err != nil {
-				return nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
+				return nil, nil, fmt.Errorf("initial proxy provider %s error: %w", pd.Name(), err)
 			}
 			for _, proxy := range pd.Proxies() {
 				proxies[fmt.Sprintf("[%s] %s", name, proxy.Name())] = &CProxy{
@@ -148,11 +149,13 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 			}
 			if _, ok := allProxies[k]; !ok {
 				allProxies[k] = p
+				proxyOrder = append(proxyOrder, k) // 添加到顺序列表
 			}
 		}
 	}
 
 	filterRegexp := regexp.MustCompile(st.config.FilterRegex)
+	var filteredOrder []string // 新增：用于保存过滤后的顺序
 
 	// 处理屏蔽关键词
 	var blockKeywords []string
@@ -193,6 +196,7 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 
 		if filterRegexp.MatchString(name) {
 			filteredProxies[name] = proxy
+			filteredOrder = append(filteredOrder, name) // 添加到过滤后的顺序列表
 		}
 	}
 
@@ -211,10 +215,10 @@ func (st *SpeedTester) LoadProxies() (map[string]*CProxy, error) {
 		fmt.Println()
 	}
 
-	return filteredProxies, nil
+	return filteredProxies, filteredOrder, nil
 }
 
-func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, fn func(result *Result)) {
+func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, proxyOrder []string,fn func(result *Result)) {
 	var htmlReporter *reporter.HTMLReporter
 	var err error
 
@@ -233,7 +237,8 @@ func (st *SpeedTester) TestProxies(proxies map[string]*CProxy, fn func(result *R
 		}
 	}
 
-	for name, proxy := range proxies {
+	for _, name := range proxyOrder {
+		proxy := proxies[name]
 		result := st.testProxy(name, proxy)
 
 		if htmlReporter != nil {
