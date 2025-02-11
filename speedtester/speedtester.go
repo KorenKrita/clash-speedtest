@@ -562,28 +562,22 @@ func (st *SpeedTester) createClient(proxy constant.Proxy) *http.Client {
 		Timeout: st.config.Timeout,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				host, portStr, err := net.SplitHostPort(addr)
+				host, port, err := net.SplitHostPort(addr)
 				if err != nil {
 					return nil, err
 				}
-
-				// 移除可能存在的 IPv6 地址的方括号
-				host = strings.Trim(host, "[]")
-
-				port, err := strconv.ParseUint(portStr, 10, 16)
-				if err != nil {
-					return nil, err
+				var u16Port uint16
+				if port, err := strconv.ParseUint(port, 10, 16); err == nil {
+					u16Port = uint16(port)
 				}
-
 				return proxy.DialContext(ctx, &constant.Metadata{
 					Host:    host,
-					DstPort: uint16(port),
+					DstPort: u16Port,
 				})
 			},
 		},
 	}
 }
-
 
 func calculateLatencyStats(latencies []time.Duration, failedPings int) *latencyResult {
 	result := &latencyResult{
