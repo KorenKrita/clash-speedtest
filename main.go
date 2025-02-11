@@ -85,14 +85,14 @@ func main() {
 	if *debugMode {
 		fmt.Println("Debug 模式已启用")
 	}
-	allProxies, err := speedTester.LoadProxies()
+	allProxies, proxyOrder, err := speedTester.LoadProxies()
 	if err != nil {
 		log.Fatalln("load proxies failed: %v", err)
 	}
 
 	bar := progressbar.Default(int64(len(allProxies)), "测试中...")
 	results := make([]*speedtester.Result, 0)
-	speedTester.TestProxies(allProxies, func(result *speedtester.Result) {
+	speedTester.TestProxies(allProxies, proxyOrder, func(result *speedtester.Result) {
 		results = append(results, result)
 		bar.Add(1)
 		bar.Describe(result.ProxyName)
